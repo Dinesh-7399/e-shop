@@ -1,0 +1,220 @@
+# ~/.gitignore
+
+# General
+# ----------------------------------------------------------------------
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE / Editor specific files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Build outputs
+build/
+dist/
+out/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Environment variables - IMPORTANT: never commit sensitive .env files
+# Commit .env.example or similar template files instead.
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Compiled binary files
+*.dll
+*.exe
+*.o
+*.so
+
+
+# Node.js / Next.js / NestJS specific
+# ----------------------------------------------------------------------
+.next/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
+# NestJS specific
+# dist/ (already covered above)
+
+# Package manager cache files
+.npm/
+.yarn/cache
+.yarn/plug-n-play
+.yarn/unplugged
+.pnp.*
+
+
+# Python / FastAPI specific
+# ----------------------------------------------------------------------
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+pyvenv.cfg
+pip-selfcheck.json
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/ # (already covered but good to have in Python section too)
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+# Usually these files are written by a python script from a template
+# before PyInstaller builds an application.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Flask specific (if any Flask apps are introduced)
+instance/
+.webassets-cache
+
+# Celery specific (if used)
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath files
+.sage/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Pytype
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+
+# Monorepo Tools (e.g., Nx, Turborepo)
+# ----------------------------------------------------------------------
+.nx/cache
+.turbo/
+node_modules/.cache # General cache that might be used by various tools
+
+
+# Cloud Specific (e.g., Google Cloud, Terraform - good practice if you use IaC)
+# ----------------------------------------------------------------------
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Google Cloud
+.gcloud/
+*.credential.json # Sensitive credentials
+
+# Serverless framework
+.serverless/
+
+
+# Other
+# ----------------------------------------------------------------------
+# Optional: if you use SQLite for local dev and don't want to commit the db file
+# *.sqlite3
+# *.db
+# *.db-journal
+
+# Temp files
+*.tmp
+*.temp
+*~

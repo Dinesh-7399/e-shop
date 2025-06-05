@@ -1,0 +1,651 @@
+// datasource db defines the database connection.
+// Using PostgreSQL for its robustness, support for JSONB, and strong data integrity features.
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// generator client specifies that Prisma Client should be generated for JavaScript/TypeScript.
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =================================================================================
+// ENUMS: Defining standardized types for status fields across the application.
+// =================================================================================
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  WAITLISTED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  OVERDUE
+}
+
+enum TransactionType {
+  PAYMENT
+  REFUND
+  FEE
+  SCHOLARSHIP
+}
+
+enum DegreeType {
+  CERTIFICATE
+  ASSOCIATE
+  BACHELOR
+  MASTER
+  DOCTORATE
+  POSTDOCTORAL
+}
+
+enum LessonContentType {
+  TEXT
+  VIDEO
+  DOCUMENT
+  ASSIGNMENT
+  QUIZ
+  VIRTUAL_LAB
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  ESSAY
+}
+
+enum SubmissionStatus {
+  PENDING
+  SUBMITTED
+  LATE
+  GRADED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+
+// =================================================================================
+// SECTION 1: CORE IAM & USER ECOSYSTEM
+// Models for identity, access control, and core user profiles.
+// =================================================================================
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLogin         DateTime?
+  isActive          Boolean   @default(true)
+  emailVerified     Boolean   @default(false)
+  profilePictureUrl String?
+
+  // Relationships to specific roles and profiles
+  profile           UserProfile?
+  student           Student?
+  faculty           Faculty?
+  admin             AdminProfile?
+  freelancer        Freelancer?
+  alumni            AlumniProfile?
+  applicant         Applicant?
+
+  // IAM relationships
+  roles             UserRole[]
+  sessions          Session[]
+  auditLogs         AuditLog[]
+  attributes        UserAttributeValue[]
+  
+  // Content authored by the user
+  threadsAuthored   Thread[]
+  postsAuthored     Post[]
+  reviewsGiven      Review[]
+  announcementsAuthored LmsAnnouncement[]
+  gradesGiven       Grade[]
+  libraryCheckouts  LibraryCheckout[]
+}
+
+model UserProfile {
+  id              String      @id @default(cuid())
+  userId          String      @unique
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber     String?
+  address         String?
+  city            String?
+  state           String?
+  country         String?
+  postalCode      String?
+  bio             String?
+  dateOfBirth     DateTime?
+}
+
+model Role {
+  id          Int           @id @default(autoincrement())
+  name        String        @unique // e.g., "STUDENT", "DEAN", "REGISTRAR"
+  description String?
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  id          Int           @id @default(autoincrement())
+  action      String        // e.g., "create", "read", "update", "delete"
+  subject     String        // e.g., "Course", "Grade", "Invoice"
+  description String?
+  roles       RolePermission[]
+
+  @@unique([action, subject])
+}
+
+model UserRole {
+  userId String
+  roleId Int
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+// For ABAC: Defines attributes that can be attached to users
+model UserAttribute {
+  id   Int    @id @default(autoincrement())
+  name String @unique // e.g., "departmentId", "securityClearance"
+  values UserAttributeValue[]
+}
+
+// For ABAC: Assigns a specific attribute value to a user
+model UserAttributeValue {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  attributeId Int
+  value     String   // e.g., "7" (for departmentId), "LEVEL_3"
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attribute UserAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, attributeId])
+}
+
+
+// =================================================================================
+// SECTION 2: UNIVERSITY MANAGEMENT SYSTEM (UMS)
+// The administrative backbone of the institution.
+// =================================================================================
+
+// --- UMS: Admissions Sub-Module ---
+model Applicant {
+  id             String        @id @default(cuid())
+  userId         String        @unique
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications   Application[]
+}
+
+model Application {
+  id              Int      @id @default(autoincrement())
+  applicantId     String
+  degreeProgramId Int
+  submissionDate  DateTime @default(now())
+  status          ApplicationStatus @default(DRAFT)
+  applicationData Json     // To store form data, essays, recommendations etc.
+
+  applicant       Applicant     @relation(fields: [applicantId], references: [id])
+  degreeProgram   DegreeProgram @relation(fields: [degreeProgramId], references: [id])
+}
+
+// --- UMS: Academics Sub-Module ---
+model Department {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  faculty     Faculty[]
+  students    Student[]
+  courses     Course[]
+  degreePrograms DegreeProgram[]
+}
+
+model DegreeProgram {
+  id          Int      @id @default(autoincrement())
+  name        String
+  type        DegreeType
+  departmentId Int
+  department  Department @relation(fields: [departmentId], references: [id])
+  courses     Course[]   @relation("DegreeCourses")
+  applications Application[]
+  students    Student[]
+}
+
+model Student {
+  id              String         @id @default(cuid())
+  userId          String         @unique
+  user            User           @relation(fields: [userId], references: [id])
+  enrollmentDate  DateTime
+  expectedGraduationDate DateTime?
+  departmentId    Int
+  degreeProgramId Int
+  
+  department      Department     @relation(fields: [departmentId], references: [id])
+  degreeProgram   DegreeProgram  @relation(fields: [degreeProgramId], references: [id])
+  enrollments     Enrollment[]
+  submissions     AssignmentSubmission[]
+  grades          Grade[]
+  financialAccount FinancialAccount?
+  labInstances    LabInstance[]
+  quizAttempts    QuizAttempt[]
+}
+
+model Faculty {
+  id           String     @id @default(cuid())
+  userId       String     @unique
+  user         User       @relation(fields: [userId], references: [id])
+  title        String     // e.g., "Professor", "Associate Professor"
+  departmentId Int
+  department   Department @relation(fields: [departmentId], references: [id])
+  sections     CourseSection[]
+  researchProjects ResearchProject[]
+}
+
+model Course {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique // e.g., "CS101"
+  title        String
+  description  String
+  credits      Float
+  departmentId Int
+  department   Department @relation(fields: [departmentId], references: [id])
+  sections     CourseSection[]
+  degreePrograms DegreeProgram[] @relation("DegreeCourses")
+  lmsCourse    LmsCourse?
+}
+
+model CourseSection {
+  id        Int       @id @default(autoincrement())
+  courseId  Int
+  facultyId String?
+  term      String    // e.g., "Fall 2025"
+  schedule  String    // e.g., "Mon/Wed 10:00-11:30"
+  location  String    // e.g., "Building 5, Room 101" or "Online"
+  maxCapacity Int
+  
+  course      Course      @relation(fields: [courseId], references: [id])
+  faculty     Faculty?    @relation(fields: [facultyId], references: [id])
+  enrollments Enrollment[]
+}
+
+model Enrollment {
+  id              Int       @id @default(autoincrement())
+  studentId       String
+  sectionId       Int
+  enrollmentDate  DateTime  @default(now())
+  
+  student   Student       @relation(fields: [studentId], references: [id])
+  section   CourseSection @relation(fields: [sectionId], references: [id])
+  grade     Grade?
+  
+  @@unique([studentId, sectionId])
+}
+
+// --- UMS: Financials Sub-Module ---
+model FinancialAccount {
+  id        String   @id @default(cuid())
+  studentId String   @unique
+  balance   Float    @default(0.0)
+  
+  student     Student       @relation(fields: [studentId], references: [id])
+  invoices    Invoice[]
+  transactions Transaction[]
+}
+
+model Invoice {
+  id          Int      @id @default(autoincrement())
+  accountId   String
+  issueDate   DateTime @default(now())
+  dueDate     DateTime
+  status      InvoiceStatus @default(OPEN)
+  
+  account     FinancialAccount @relation(fields: [accountId], references: [id])
+  items       InvoiceItem[]
+  transactions Transaction[]
+}
+
+model InvoiceItem {
+  id          Int    @id @default(autoincrement())
+  invoiceId   Int
+  description String // e.g., "Tuition Fee - Fall 2025", "Lab Fee - CHEM101"
+  amount      Float
+  
+  invoice     Invoice @relation(fields: [invoiceId], references: [id])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  accountId   String
+  invoiceId   Int?
+  type        TransactionType
+  amount      Float
+  date        DateTime @default(now())
+  method      String?  // e.g., "Credit Card", "Bank Transfer"
+  reference   String?  // e.g., transaction ID from payment gateway
+  
+  account     FinancialAccount @relation(fields: [accountId], references: [id])
+  invoice     Invoice?      @relation(fields: [invoiceId], references: [id])
+}
+
+// --- UMS: Supporting Services Sub-Module ---
+model AdminProfile {
+  id       String @id @default(cuid())
+  userId   String @unique
+  user     User   @relation(fields: [userId], references: [id])
+  jobTitle String // "Registrar", "IT Support"
+}
+
+model ResearchProject {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  piId        String   // Principal Investigator's User ID (from Faculty)
+  startDate   DateTime
+  endDate     DateTime?
+  
+  pi          Faculty  @relation(fields: [piId], references: [id])
+}
+
+model LibraryResource {
+  id            Int      @id @default(autoincrement())
+  title         String
+  author        String
+  isbn          String?  @unique
+  type          String   // e.g., "BOOK", "JOURNAL", "EBOOK"
+  isAvailable   Boolean  @default(true)
+  checkouts     LibraryCheckout[]
+}
+
+model LibraryCheckout {
+  id           Int       @id @default(autoincrement())
+  resourceId   Int
+  userId       String
+  checkoutDate DateTime  @default(now())
+  dueDate      DateTime
+  returnDate   DateTime?
+
+  resource     LibraryResource @relation(fields: [resourceId], references: [id])
+  user         User            @relation(fields: [userId], references: [id])
+  
+  @@unique([resourceId, userId]) // Assuming a user can only check out one copy of a resource at a time
+}
+
+model AlumniProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  graduationYear  Int
+  company         String?
+  jobTitle        String?
+}
+
+// =================================================================================
+// SECTION 3: LEARNING MANAGEMENT SYSTEM (LMS)
+// The pedagogical core for teaching and learning.
+// =================================================================================
+
+model LmsCourse {
+  id          Int      @id @default(autoincrement())
+  courseId    Int      @unique
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  modules     LmsModule[]
+  announcements LmsAnnouncement[]
+  discussionForum DiscussionForum?
+}
+
+model LmsModule {
+  id        Int       @id @default(autoincrement())
+  title     String
+  order     Int
+  lmsCourseId Int
+  lmsCourse LmsCourse @relation(fields: [lmsCourseId], references: [id], onDelete: Cascade)
+  lessons   LmsLesson[]
+  
+  @@unique([lmsCourseId, order])
+}
+
+model LmsLesson {
+  id          Int       @id @default(autoincrement())
+  title       String
+  order       Int
+  moduleId    Int
+  contentType LessonContentType
+  content     Json      // { "text": "...", "videoUrl": "...", "documentUrl": "..." }
+  
+  module      LmsModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  assignment  Assignment?
+  quiz        Quiz?
+  
+  @@unique([moduleId, order])
+}
+
+model Assignment {
+  id           Int        @id @default(autoincrement())
+  lessonId     Int        @unique
+  lesson       LmsLesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  dueDate      DateTime
+  maxPoints    Int
+  instructions String?
+  submissions  AssignmentSubmission[]
+}
+
+model AssignmentSubmission {
+  id           Int      @id @default(autoincrement())
+  assignmentId Int
+  studentId    String
+  submittedAt  DateTime @default(now())
+  status       SubmissionStatus @default(SUBMITTED)
+  content      Json     // { "fileUrl": "...", "text": "..." }
+  
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  student      Student    @relation(fields: [studentId], references: [id])
+  grade        Grade?
+  
+  @@unique([assignmentId, studentId])
+}
+
+model Quiz {
+  id        Int       @id @default(autoincrement())
+  lessonId  Int       @unique
+  lesson    LmsLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  timeLimit Int?      // Time limit in minutes
+  questions Question[]
+  attempts  QuizAttempt[]
+}
+
+model Question {
+  id        Int      @id @default(autoincrement())
+  quizId    Int
+  text      String
+  type      QuestionType
+  points    Int
+  options   Json?    // For multiple choice: [{ "text": "...", "isCorrect": true/false }]
+  
+  quiz      Quiz     @relation(fields: [quizId], references: [id])
+}
+
+model QuizAttempt {
+  id        Int      @id @default(autoincrement())
+  quizId    Int
+  studentId String
+  startTime DateTime @default(now())
+  endTime   DateTime?
+  score     Float?
+  
+  quiz      Quiz     @relation(fields: [quizId], references: [id])
+  student   Student  @relation(fields: [studentId], references: [id])
+}
+
+model Grade {
+  id           Int       @id @default(autoincrement())
+  score        Float
+  comments     String?
+  gradedAt     DateTime  @default(now())
+  gradedById   String    // User ID of the grader (faculty/admin)
+  
+  studentId    String
+  enrollmentId Int       @unique // For the final course grade
+  submissionId Int?      @unique // For an assignment grade
+  
+  student      Student    @relation(fields: [studentId], references: [id])
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id])
+  submission   AssignmentSubmission? @relation(fields: [submissionId], references: [id])
+  gradedBy     User       @relation(fields: [gradedById], references: [id])
+}
+
+model DiscussionForum {
+  id        Int      @id @default(autoincrement())
+  lmsCourseId Int    @unique
+  lmsCourse LmsCourse @relation(fields: [lmsCourseId], references: [id])
+  threads   Thread[]
+}
+
+model Thread {
+  id        Int      @id @default(autoincrement())
+  title     String
+  forumId   Int
+  authorId  String
+  createdAt DateTime @default(now())
+  
+  forum     DiscussionForum @relation(fields: [forumId], references: [id])
+  author    User            @relation(fields: [authorId], references: [id])
+  posts     Post[]
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  content   String
+  threadId  Int
+  authorId  String
+  createdAt DateTime @default(now())
+  
+  thread    Thread   @relation(fields: [threadId], references: [id])
+  author    User     @relation(fields: [authorId], references: [id])
+}
+
+
+// =================================================================================
+// SECTION 4: VIRTUAL LABS & FREELANCER ECOSYSTEM
+// Models for innovative pedagogy and content creation.
+// =================================================================================
+
+model Freelancer {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id])
+  expertise      String[]
+  
+  submissions    ContentSubmission[]
+  payouts        Payout[]
+}
+
+model ContentSubmission {
+  id            Int      @id @default(autoincrement())
+  freelancerId  String
+  title         String
+  description   String
+  contentJson   Json     // The actual content, e.g., virtual lab definition
+  status        ReviewStatus @default(PENDING)
+  submittedAt   DateTime @default(now())
+  
+  freelancer    Freelancer @relation(fields: [freelancerId], references: [id])
+  review        Review?
+}
+
+model Review {
+  id            Int      @id @default(autoincrement())
+  submissionId  Int      @unique
+  reviewerId    String   // Admin/Faculty User ID
+  comments      String
+  reviewedAt    DateTime @default(now())
+  
+  submission    ContentSubmission @relation(fields: [submissionId], references: [id])
+  reviewer      User              @relation(fields: [reviewerId], references: [id])
+}
+
+model VirtualLab {
+  id            Int      @id @default(autoincrement())
+  title         String
+  description   String
+  discipline    String   // e.g., "Physics", "Chemistry"
+  configJson    Json     // Defines components, properties, simulation rules
+  
+  instances     LabInstance[]
+}
+
+model LabInstance {
+  id           Int       @id @default(autoincrement())
+  virtualLabId Int
+  studentId    String
+  stateJson    Json      // User's specific experiment state
+  lastAccessed DateTime  @updatedAt
+  
+  virtualLab   VirtualLab @relation(fields: [virtualLabId], references: [id])
+  student      Student    @relation(fields: [studentId], references: [id])
+}
+
+model Payout {
+  id          Int      @id @default(autoincrement())
+  freelancerId String
+  amount      Float
+  date        DateTime @default(now())
+  reference   String   // Payout transaction reference
+  
+  freelancer  Freelancer @relation(fields: [freelancerId], references: [id])
+}
+
+// =================================================================================
+// SECTION 5: SYSTEM & MISCELLANEOUS
+// =================================================================================
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // e.g., "USER_LOGIN", "COURSE_DELETED"
+  details   Json?
+  timestamp DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model LmsAnnouncement {
+  id        Int       @id @default(autoincrement())
+  lmsCourseId Int
+  title     String
+  body      String
+  postedAt  DateTime  @default(now())
+  authorId  String
+
+  lmsCourse LmsCourse @relation(fields: [lmsCourseId], references: [id])
+  author    User      @relation(fields: [authorId], references: [id])
+}
